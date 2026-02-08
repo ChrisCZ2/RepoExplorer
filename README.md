@@ -5,26 +5,22 @@ A powerful Caido plugin that allows you to browse and explore content from GitHu
 ## Features
 
 ### Core Functionality
-- **📁 Browse Categories**: Navigate through all directory categories from any GitHub repository
-- **🔍 Repository Search**: Search and discover GitHub repositories directly in the plugin
-- **📄 File Browser**: Browse and view files within each category
-- **📋 Copy to Clipboard**: Easily copy file contents for use in your security testing
-- **💾 Export Files**: Export individual files as JSON or TXT
-- **🔄 Multi-Repository Support**: Add, remove, and switch between multiple repositories
+- ** Browse Categories**: Navigate through all directory categories from any GitHub repository
+- ** Repository Search**: Search and discover GitHub repositories directly in the plugin
+- ** File Browser**: Browse and view files within each category
+- ** Copy to Clipboard**: Easily copy file contents for use in your security testing
+- ** Export Files**: Export individual files as JSON or TXT
+- ** Multi-Repository Support**: Add, remove, and switch between multiple repositories
 
 ### Organization & Management
-- **⭐ Favorites**: Mark files as favorites for quick access
-- **📚 Collections**: Create custom collections to organize related files
-- **🏷️ Tags**: Create custom tags with colors to categorize and filter files
-- **📊 Bulk Actions**: Select multiple files and perform batch operations (favorite, tag, add to collections)
-- **📜 History**: Track your recently viewed files with timestamps
-- **📝 Real-Time Logs**: Monitor all plugin actions with detailed logging system
+- ** Favorites**: Mark files as favorites for quick access
+- ** Collections**: Create custom collections to organize related files
+- ** Tags**: Create custom tags with colors to categorize and filter files
+- ** Bulk Actions**: Select multiple files and perform batch operations (favorite, tag, add to collections)
+- ** History**: Track your recently viewed files with timestamps
+- ** Real-Time Logs**: Monitor all plugin actions with detailed logging system
 
-### User Experience
-- **🎨 Beautiful UI**: Modern gradient design with smooth animations
-- **⚡ Fast Loading**: Efficient GitHub API integration
-- **🔎 Advanced Filtering**: Filter by favorites, collections, tags, or search terms
-- **📱 Responsive Design**: Clean and intuitive interface
+
 
 ## Installation
 
