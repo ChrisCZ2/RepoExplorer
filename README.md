@@ -2,6 +2,9 @@
 
 A powerful Caido plugin that allows you to browse and explore content from GitHub repositories like [PayloadsAllTheThings](https://github.com/swisskyrepo/PayloadsAllTheThings) and any other public GitHub repository directly within Caido.
 
+
+## Youtube video going over features:
+
 ## Features
 
 ### Core Functionality
