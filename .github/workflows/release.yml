@@ -37,7 +37,7 @@ jobs:
         with:
           name: plugin-package
           path: dist/plugin_package.zip
-          retention-days: 30
+          
       - name: Create Release Asset
         uses: softprops/action-gh-release@v2
         with:
