@@ -35,7 +35,7 @@ jobs:
       - name: Build package
         run: pnpm build
 
-      - name: Sign package
+      - name: sign package
         working-directory: dist
         run: |
           if [[ -z "$PRIVATE_KEY" ]]; then
