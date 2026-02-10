@@ -12,7 +12,7 @@ concurrency:
 
 env:
   CAIDO_NODE_VERSION: 20
-  CAIDO_PNPM_VERSION: 9
+  CAIDO_PNPM_VERSION: 10
 
 jobs:
   typecheck:
