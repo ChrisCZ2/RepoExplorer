@@ -34,6 +34,7 @@ jobs:
 
       - name: Build package
         run: pnpm build
+
       - name: Sign package
         working-directory: dist
         run: |
