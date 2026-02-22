@@ -4,7 +4,15 @@ A powerful Caido plugin that allows you to browse and explore content from GitHu
 
 
 ## Youtube video going over features:
+
+
 COMING SOON
+
+
+ ## UI 
+![Alt text](images/your-image.png)
+
+ 
 ## Features
 
 ### Core Functionality
