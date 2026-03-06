@@ -1,5 +1,5 @@
 {
-  "name": "repo-explorer",
+  "name": "Repo-Explorer",
   "version": "1.0.3",
   "packageManager": "pnpm@10.14.0",
   "description": "Browse and explore content from GitHub repositories like PayloadsAllTheThings",
