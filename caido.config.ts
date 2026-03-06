@@ -7,10 +7,10 @@ import tailwindCaido from "@caido/tailwindcss";
 import path from "path";
 import prefixwrap from "postcss-prefixwrap";
 
-const id = "Repo-Explorer";
+const id = "repo-explorer";
 export default defineConfig({
   id,
-  name: "RepoExplorer",
+  name: "Repo Explorer",
   description: "Browse and explore content from GitHub repositories like PayloadsAllTheThings",
   version: "1.0.3",
   author: {
