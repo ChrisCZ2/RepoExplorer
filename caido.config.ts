@@ -7,7 +7,7 @@ import tailwindCaido from "@caido/tailwindcss";
 import path from "path";
 import prefixwrap from "postcss-prefixwrap";
 
-const id = "repo-explorer";
+const id = "Repo-Explorer";
 export default defineConfig({
   id,
   name: "RepoExplorer",
