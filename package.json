@@ -1,6 +1,6 @@
 {
   "name": "repo-explorer",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "packageManager": "pnpm@10.14.0",
   "description": "Browse and explore content from GitHub repositories like PayloadsAllTheThings",
   "author": "Chriscz <chrisczv@proton.me>",
