@@ -12,7 +12,7 @@ export default defineConfig({
   id,
   name: "Repo Explorer",
   description: "Browse and explore content from GitHub repositories like PayloadsAllTheThings",
-  version: "1.0.5",
+  version: "1.0.6",
   author: {
     name: "Chriscz",
     email: "chrisczv@proton.me",
