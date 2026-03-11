@@ -37,9 +37,7 @@ jobs:
           if [[ -z "${{ secrets.PRIVATE_KEY }}" ]]; then
             echo "Set an ed25519 key as PRIVATE_KEY in GitHub Action secret to sign."
           else
-            cat > private_key.pem << 'EOF'
-       ${{ secrets.PRIVATE_KEY }}
-       EOF
+            echo "${{ secrets.PRIVATE_KEY }}" > private_key.pem
             openssl pkeyutl -sign -inkey private_key.pem -out plugin_package.zip.sig -rawin -in plugin_package.zip
             rm private_key.pem
           fi
