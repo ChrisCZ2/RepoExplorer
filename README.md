@@ -6,7 +6,7 @@ A powerful Caido plugin that allows you to browse and explore content from GitHu
 ## Youtube video going over features:
 
 
-COMING SOON
+[Youtube features overview](https://youtu.be/82jVlhgwsnU)
 
 
  ## UI 
