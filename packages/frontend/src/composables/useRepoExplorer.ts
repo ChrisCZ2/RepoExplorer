@@ -6,6 +6,7 @@ import type {
   CachedFile,
   Collection,
   CollectionItem,
+  CustomPayload,
   Favorite,
   GitHubContent,
   GitHubRepo,
@@ -29,7 +30,22 @@ const STORAGE_KEYS = {
   REPOS: "repo-explorer-repos",
   HISTORY: "repo-explorer-history",
   LOGS: "repo-explorer-logs",
+  CUSTOM_PAYLOADS: "repo-explorer-custom-payloads",
 } as const;
+
+const sanitizeImportedData = (text: string): string => {
+  try {
+    const parsed = JSON.parse(text);
+    const sanitized = JSON.parse(
+      JSON.stringify(parsed, (key, value) =>
+        value === null ? undefined : value,
+      ),
+    );
+    return JSON.stringify(sanitized);
+  } catch {
+    return text;
+  }
+};
 
 const saveToLocalStorage = <T>(key: string, data: T): void => {
   try {
@@ -43,10 +59,87 @@ const loadFromLocalStorage = <T>(key: string, defaultValue: T): T => {
   try {
     const stored = localStorage.getItem(key);
     if (stored !== null) {
-      return JSON.parse(stored) as T;
+      const parsed = JSON.parse(stored) as T;
+
+      if (key === STORAGE_KEYS.FAVORITES && Array.isArray(parsed)) {
+        const validFavorites = (parsed as unknown as Favorite[]).filter((f) => {
+          return (
+            f !== null &&
+            f !== undefined &&
+            typeof f.owner === "string" &&
+            f.owner !== null &&
+            typeof f.repo === "string" &&
+            f.repo !== null &&
+            typeof f.path === "string" &&
+            f.path !== null &&
+            typeof f.name === "string" &&
+            f.name !== null
+          );
+        });
+        return validFavorites as T;
+      }
+
+      if (key === STORAGE_KEYS.COLLECTIONS && Array.isArray(parsed)) {
+        const validCollections = (parsed as unknown as Collection[]).filter(
+          (c) => {
+            return (
+              c !== null &&
+              c !== undefined &&
+              typeof c.id === "string" &&
+              c.id !== null &&
+              typeof c.name === "string" &&
+              c.name !== null
+            );
+          },
+        );
+        return validCollections as T;
+      }
+
+      if (key === STORAGE_KEYS.COLLECTION_ITEMS && Array.isArray(parsed)) {
+        const validItems = (parsed as unknown as CollectionItem[]).filter(
+          (i) => {
+            return (
+              i !== null &&
+              i !== undefined &&
+              typeof i.collectionId === "string" &&
+              i.collectionId !== null &&
+              typeof i.owner === "string" &&
+              i.owner !== null &&
+              typeof i.repo === "string" &&
+              i.repo !== null &&
+              typeof i.path === "string" &&
+              i.path !== null &&
+              typeof i.name === "string" &&
+              i.name !== null
+            );
+          },
+        );
+        return validItems as T;
+      }
+
+      if (key === STORAGE_KEYS.CUSTOM_PAYLOADS && Array.isArray(parsed)) {
+        const validPayloads = (parsed as unknown as CustomPayload[]).filter(
+          (p) => {
+            return (
+              p !== null &&
+              p !== undefined &&
+              typeof p.id === "string" &&
+              p.id !== null &&
+              typeof p.name === "string" &&
+              p.name !== null &&
+              typeof p.content === "string" &&
+              p.content !== null
+            );
+          },
+        );
+        return validPayloads as T;
+      }
+
+      return parsed;
     }
   } catch (error) {
     console.error(`Failed to load from localStorage: ${key}`, error);
+    localStorage.removeItem(key);
   }
   return defaultValue;
 };
@@ -109,6 +202,16 @@ export const useRepoExplorer = () => {
     loadFromLocalStorage(STORAGE_KEYS.HISTORY, []),
   );
   const logs = ref<LogEntry[]>(loadFromLocalStorage(STORAGE_KEYS.LOGS, []));
+  const customPayloads = ref<CustomPayload[]>(
+    loadFromLocalStorage(STORAGE_KEYS.CUSTOM_PAYLOADS, []),
+  );
+  const showCustomPayloadDialog = ref(false);
+  const showCustomPayloadViewDialog = ref(false);
+  const viewingCustomPayload = ref<CustomPayload | undefined>(undefined);
+  const editingCustomPayload = ref<CustomPayload | undefined>(undefined);
+  const newCustomPayloadName = ref("");
+  const newCustomPayloadContent = ref("");
+  const newCustomPayloadDescription = ref("");
   const fileCache = ref<Map<string, CachedFile>>(new Map());
   const CACHE_DURATION = 1000 * 60 * 30;
   const showNoteDialog = ref(false);
@@ -1090,6 +1193,402 @@ export const useRepoExplorer = () => {
     bulkSelectionMode.value = false;
   };
 
+  const loadCustomPayloads = async () => {
+    const result = await sdk.backend.getCustomPayloads();
+    if (result.kind === "Ok") {
+      customPayloads.value = result.value;
+      saveToLocalStorage(STORAGE_KEYS.CUSTOM_PAYLOADS, result.value);
+    }
+  };
+
+  const openCustomPayloadDialog = (payload?: CustomPayload) => {
+    if (payload !== undefined) {
+      editingCustomPayload.value = payload;
+      newCustomPayloadName.value = payload.name;
+      newCustomPayloadContent.value = payload.content;
+      newCustomPayloadDescription.value = payload.description ?? "";
+    } else {
+      editingCustomPayload.value = undefined;
+      newCustomPayloadName.value = "";
+      newCustomPayloadContent.value = "";
+      newCustomPayloadDescription.value = "";
+    }
+    showCustomPayloadDialog.value = true;
+  };
+
+  const saveCustomPayload = async () => {
+    if (newCustomPayloadName.value.trim().length === 0) {
+      sdk.window.showToast("Payload name is required", { variant: "error" });
+      return;
+    }
+
+    if (newCustomPayloadContent.value.trim().length === 0) {
+      sdk.window.showToast("Payload content is required", { variant: "error" });
+      return;
+    }
+
+    if (editingCustomPayload.value !== undefined) {
+      const result = await sdk.backend.updateCustomPayload(
+        editingCustomPayload.value.id,
+        newCustomPayloadName.value.trim(),
+        newCustomPayloadContent.value,
+        newCustomPayloadDescription.value.trim(),
+      );
+      if (result.kind === "Ok") {
+        customPayloads.value = result.value;
+        saveToLocalStorage(STORAGE_KEYS.CUSTOM_PAYLOADS, result.value);
+        showCustomPayloadDialog.value = false;
+        sdk.window.showToast("Custom payload updated successfully", {
+          variant: "success",
+        });
+        await addLogEntry(
+          "success",
+          "Custom Payload Updated",
+          `Updated custom payload "${newCustomPayloadName.value}"`,
+        );
+      } else {
+        sdk.window.showToast(result.error, { variant: "error" });
+      }
+    } else {
+      const result = await sdk.backend.createCustomPayload(
+        newCustomPayloadName.value.trim(),
+        newCustomPayloadContent.value,
+        newCustomPayloadDescription.value.trim(),
+      );
+      if (result.kind === "Ok") {
+        customPayloads.value = result.value;
+        saveToLocalStorage(STORAGE_KEYS.CUSTOM_PAYLOADS, result.value);
+        showCustomPayloadDialog.value = false;
+        sdk.window.showToast("Custom payload created successfully", {
+          variant: "success",
+        });
+        await addLogEntry(
+          "success",
+          "Custom Payload Created",
+          `Created custom payload "${newCustomPayloadName.value}"`,
+        );
+      } else {
+        sdk.window.showToast(result.error, { variant: "error" });
+      }
+    }
+  };
+
+  const deleteCustomPayload = async (id: string) => {
+    const payload = customPayloads.value.find((p) => p.id === id);
+    if (payload === undefined) return;
+
+    const result = await sdk.backend.deleteCustomPayload(id);
+    if (result.kind === "Ok") {
+      customPayloads.value = result.value;
+      saveToLocalStorage(STORAGE_KEYS.CUSTOM_PAYLOADS, result.value);
+      sdk.window.showToast("Custom payload deleted", { variant: "success" });
+      await addLogEntry(
+        "info",
+        "Custom Payload Deleted",
+        `Deleted custom payload "${payload.name}"`,
+      );
+    } else {
+      sdk.window.showToast(result.error, { variant: "error" });
+    }
+  };
+
+  const copyCustomPayloadToClipboard = async (payload: CustomPayload) => {
+    try {
+      await navigator.clipboard.writeText(payload.content);
+      sdk.window.showToast(`Copied "${payload.name}" to clipboard`, {
+        variant: "success",
+      });
+      await addLogEntry(
+        "success",
+        "Custom Payload Copied",
+        `Copied custom payload "${payload.name}" to clipboard`,
+      );
+    } catch {
+      sdk.window.showToast("Failed to copy to clipboard", {
+        variant: "error",
+      });
+    }
+  };
+
+  const exportCustomPayloads = () => {
+    if (customPayloads.value.length === 0) {
+      sdk.window.showToast("No custom payloads to export", {
+        variant: "warning",
+      });
+      return;
+    }
+
+    const exportData = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      customPayloads: customPayloads.value,
+    };
+
+    const blob = new Blob([JSON.stringify(exportData, undefined, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `custom-payloads-${Date.now()}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    sdk.window.showToast(
+      `Exported ${customPayloads.value.length} custom payload(s)`,
+      { variant: "success" },
+    );
+  };
+
+  const importCustomPayloads = async (file: File) => {
+    let hasSuccess = false;
+    try {
+      const text = await file.text();
+
+      if (text.trim().length === 0) {
+        sdk.window.showToast("File is empty", {
+          variant: "error",
+        });
+        return;
+      }
+
+      let isJsonFile = false;
+      let data:
+        | { version?: number; customPayloads?: CustomPayload[] }
+        | undefined;
+
+      try {
+        const sanitized = sanitizeImportedData(text);
+        data = JSON.parse(sanitized) as {
+          version?: number;
+          customPayloads?: CustomPayload[];
+        };
+        isJsonFile = true;
+      } catch {
+        isJsonFile = false;
+      }
+
+      if (
+        isJsonFile &&
+        data !== undefined &&
+        data.customPayloads !== undefined &&
+        Array.isArray(data.customPayloads)
+      ) {
+        if (data.customPayloads.length === 0) {
+          sdk.window.showToast("No custom payloads found in file", {
+            variant: "info",
+          });
+          return;
+        }
+
+        let importedCount = 0;
+        let skippedCount = 0;
+        const errors: string[] = [];
+
+        for (const payload of data.customPayloads) {
+          try {
+            if (
+              payload !== null &&
+              payload !== undefined &&
+              typeof payload.name === "string" &&
+              payload.name !== null &&
+              payload.name.trim().length > 0 &&
+              typeof payload.content === "string" &&
+              payload.content !== null &&
+              payload.content.trim().length > 0
+            ) {
+              const exists = customPayloads.value.some(
+                (p) =>
+                  p.name.toLowerCase() === payload.name.trim().toLowerCase(),
+              );
+
+              if (!exists) {
+                const description =
+                  typeof payload.description === "string" &&
+                  payload.description !== null &&
+                  payload.description.trim().length > 0
+                    ? payload.description.trim()
+                    : undefined;
+
+                const tags =
+                  Array.isArray(payload.tags) && payload.tags.length > 0
+                    ? payload.tags
+                    : undefined;
+
+                let result;
+                if (description !== undefined && tags !== undefined) {
+                  result = await sdk.backend.createCustomPayload(
+                    payload.name.trim(),
+                    payload.content,
+                    description,
+                    tags,
+                  );
+                } else if (description !== undefined) {
+                  result = await sdk.backend.createCustomPayload(
+                    payload.name.trim(),
+                    payload.content,
+                    description,
+                  );
+                } else {
+                  result = await sdk.backend.createCustomPayload(
+                    payload.name.trim(),
+                    payload.content,
+                  );
+                }
+
+                if (result.kind === "Ok") {
+                  customPayloads.value = result.value;
+                  importedCount++;
+                } else {
+                  errors.push(`${payload.name}: ${result.error}`);
+                }
+              } else {
+                skippedCount++;
+              }
+            } else {
+              const name =
+                payload !== null &&
+                payload !== undefined &&
+                typeof payload.name === "string" &&
+                payload.name !== null
+                  ? payload.name
+                  : "Unknown";
+              errors.push(`${name}: missing name or content`);
+            }
+          } catch (err) {
+            const name =
+              payload !== null &&
+              payload !== undefined &&
+              typeof payload.name === "string" &&
+              payload.name !== null
+                ? payload.name
+                : "Unknown";
+            errors.push(
+              `${name}: ${err instanceof Error ? err.message : "Import error"}`,
+            );
+          }
+        }
+
+        saveToLocalStorage(STORAGE_KEYS.CUSTOM_PAYLOADS, customPayloads.value);
+
+        if (importedCount > 0) {
+          hasSuccess = true;
+          let message = `Imported ${importedCount} custom payload(s)`;
+          if (skippedCount > 0) {
+            message += `, skipped ${skippedCount} duplicate(s)`;
+          }
+          sdk.window.showToast(message, { variant: "success" });
+          try {
+            await addLogEntry("success", "Custom Payloads Imported", message);
+          } catch {
+            // Ignore log errors
+          }
+        } else if (skippedCount > 0) {
+          hasSuccess = true;
+          sdk.window.showToast(
+            `All ${skippedCount} custom payloads already exist`,
+            {
+              variant: "info",
+            },
+          );
+        } else if (errors.length > 0) {
+          sdk.window.showToast(
+            `Import failed: ${errors.slice(0, 3).join(", ")}${errors.length > 3 ? "..." : ""}`,
+            { variant: "error" },
+          );
+        }
+      } else {
+        const fileName = file.name.replace(/\.[^/.]+$/, "");
+        const baseName = fileName.length > 0 ? fileName : "Imported Payload";
+
+        let finalName = baseName;
+        let counter = 1;
+        while (
+          customPayloads.value.some(
+            (p) => p.name.toLowerCase() === finalName.toLowerCase(),
+          )
+        ) {
+          finalName = `${baseName} (${counter})`;
+          counter++;
+        }
+
+        const result = await sdk.backend.createCustomPayload(
+          finalName,
+          text,
+          `Imported from ${file.name}`,
+        );
+
+        if (result.kind === "Ok") {
+          hasSuccess = true;
+          customPayloads.value = result.value;
+          saveToLocalStorage(STORAGE_KEYS.CUSTOM_PAYLOADS, result.value);
+          sdk.window.showToast(
+            `Imported text file "${file.name}" as custom payload "${finalName}"`,
+            { variant: "success" },
+          );
+          try {
+            await addLogEntry(
+              "success",
+              "Custom Payload Created from File",
+              `Imported ${file.name} as "${finalName}"`,
+            );
+          } catch {
+            // Ignore log errors
+          }
+        } else {
+          sdk.window.showToast(result.error, { variant: "error" });
+        }
+      }
+    } catch (error) {
+      if (!hasSuccess) {
+        const errorMessage =
+          error instanceof Error ? error.message : "Unknown error";
+        sdk.window.showToast(`Failed to import: ${errorMessage}`, {
+          variant: "error",
+        });
+      }
+    }
+  };
+
+  const triggerCustomPayloadImport = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json,.txt,.md";
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file !== undefined) {
+        importCustomPayloads(file);
+      }
+    };
+    input.click();
+  };
+
+  const viewCustomPayloads = () => {
+    viewState.value = "custom-payloads";
+  };
+
+  const exportCustomPayloadAsFile = (payload: CustomPayload) => {
+    const blob = new Blob([payload.content], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${payload.name.replace(/\s+/g, "-").toLowerCase()}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    sdk.window.showToast(`Exported "${payload.name}" as file`, {
+      variant: "success",
+    });
+  };
+
+  const viewCustomPayload = (payload: CustomPayload) => {
+    viewingCustomPayload.value = payload;
+    showCustomPayloadViewDialog.value = true;
+  };
+
   const getFileIcon = (item: GitHubContent): string => {
     if (item.type === "dir") return "fas fa-folder";
     const ext = item.name.split(".").pop()?.toLowerCase();
@@ -1103,13 +1602,10 @@ export const useRepoExplorer = () => {
       xml: "fas fa-file-code",
       html: "fas fa-file-code",
       css: "fas fa-file-code",
-      sh: "fas fa-terminal",
-      bash: "fas fa-terminal",
-      png: "fas fa-file-image",
-      jpg: "fas fa-file-image",
-      gif: "fas fa-file-image",
-      svg: "fas fa-file-image",
-      pdf: "fas fa-file-pdf",
+      php: "fas fa-file-code",
+      sh: "fas fa-file-code",
+      yaml: "fas fa-file-code",
+      yml: "fas fa-file-code",
     };
     return iconMap[ext ?? ""] ?? "fas fa-file";
   };
@@ -1117,35 +1613,50 @@ export const useRepoExplorer = () => {
   const formatFileSize = (bytes: number): string => {
     if (bytes === 0) return "0 B";
     const k = 1024;
-    const sizes = ["B", "KB", "MB", "GB"];
+    const sizes = ["B", "KB", "MB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
   };
 
   const copyToClipboard = async () => {
     try {
       await navigator.clipboard.writeText(fileContent.value);
-      await addLogEntry(
-        "success",
-        "Content Copied to Clipboard",
-        selectedFile.value
-          ? `Successfully copied "${selectedFile.value.name}" content to clipboard (${fileContent.value.length} characters). You can now paste it anywhere you need.`
-          : `Successfully copied content to clipboard (${fileContent.value.length} characters). Ready to paste.`,
-        {
-          fileName: selectedFile.value?.name,
-          contentLength: fileContent.value.length,
-          lines: fileContent.value.split("\n").length,
-        },
-      );
       sdk.window.showToast("Copied to clipboard", { variant: "success" });
-      await addHistory("copied");
-    } catch {
-      await addLogEntry(
-        "error",
-        "Clipboard Copy Failed",
-        "Unable to copy content to clipboard. This may be due to browser permissions or security settings. Please try again or check your browser settings.",
-      );
-      sdk.window.showToast("Failed to copy", { variant: "error" });
+      if (selectedFile.value !== undefined && currentRepo.value !== undefined) {
+        await sdk.backend.addToHistory(
+          currentRepo.value.owner,
+          currentRepo.value.repo,
+          selectedFile.value.path,
+          selectedFile.value.name,
+          "copied",
+        );
+        await addLogEntry(
+          "success",
+          "File Copied",
+          `Copied ${selectedFile.value.name} to clipboard`,
+          {
+            fileName: selectedFile.value.name,
+            filePath: selectedFile.value.path,
+            repository: `${currentRepo.value.owner}/${currentRepo.value.repo}`,
+          },
+        );
+      }
+    } catch (error) {
+      console.error("Failed to copy to clipboard:", error);
+      if (
+        error instanceof Error &&
+        error.message.includes("document is not focused")
+      ) {
+        sdk.window.showToast(
+          "Please click inside the window first, then try again",
+          { variant: "warning" },
+        );
+      } else {
+        sdk.window.showToast(
+          "Failed to copy. Your browser may not support this feature.",
+          { variant: "warning" },
+        );
+      }
     }
   };
 
@@ -1179,46 +1690,162 @@ export const useRepoExplorer = () => {
   };
 
   const importFavorites = async (file: File) => {
+    let hasSuccess = false;
     try {
-      const text = await file.text();
-      const data = JSON.parse(text) as {
-        version?: number;
-        favorites?: Favorite[];
-      };
+      let text = await file.text();
 
-      if (!data.favorites || !Array.isArray(data.favorites)) {
-        sdk.window.showToast("Invalid favorites file format", {
+      if (text.trim().length === 0) {
+        sdk.window.showToast("File is empty", {
           variant: "error",
         });
         return;
       }
 
+      text = sanitizeImportedData(text);
+
+      let data;
+      try {
+        data = JSON.parse(text) as {
+          version?: number;
+          favorites?: Favorite[];
+        };
+      } catch (parseError) {
+        sdk.window.showToast(
+          `Invalid JSON format: ${parseError instanceof Error ? parseError.message : "Parse error"}`,
+          {
+            variant: "error",
+          },
+        );
+        return;
+      }
+
+      if (data.favorites === undefined || !Array.isArray(data.favorites)) {
+        sdk.window.showToast(
+          "Invalid favorites file format - missing 'favorites' array",
+          {
+            variant: "error",
+          },
+        );
+        return;
+      }
+
+      if (data.favorites.length === 0) {
+        sdk.window.showToast("No favorites found in file", {
+          variant: "info",
+        });
+        return;
+      }
+
       let importedCount = 0;
+      let skippedCount = 0;
+      const errors: string[] = [];
+
       for (const fav of data.favorites) {
-        if (fav.owner && fav.repo && fav.path && fav.name) {
-          const exists = favorites.value.some((f) => f.id === fav.id);
-          if (!exists) {
-            const result = await sdk.backend.addFavorite(
-              fav.owner,
-              fav.repo,
-              fav.path,
-              fav.name,
-              fav.note,
-            );
-            if (result.kind === "Ok") {
-              favorites.value = result.value;
-              importedCount++;
+        try {
+          if (
+            fav !== null &&
+            fav !== undefined &&
+            typeof fav.owner === "string" &&
+            fav.owner !== null &&
+            fav.owner.trim().length > 0 &&
+            typeof fav.repo === "string" &&
+            fav.repo !== null &&
+            fav.repo.trim().length > 0 &&
+            typeof fav.path === "string" &&
+            fav.path !== null &&
+            fav.path.trim().length > 0 &&
+            typeof fav.name === "string" &&
+            fav.name !== null &&
+            fav.name.trim().length > 0
+          ) {
+            const id = `${fav.owner.trim()}/${fav.repo.trim()}/${fav.path.trim()}`;
+            const exists = favorites.value.some((f) => f.id === id);
+
+            if (!exists) {
+              const note =
+                typeof fav.note === "string" &&
+                fav.note !== null &&
+                fav.note.trim().length > 0
+                  ? fav.note.trim()
+                  : undefined;
+
+              const result =
+                note !== undefined
+                  ? await sdk.backend.addFavorite(
+                      fav.owner.trim(),
+                      fav.repo.trim(),
+                      fav.path.trim(),
+                      fav.name.trim(),
+                      note,
+                    )
+                  : await sdk.backend.addFavorite(
+                      fav.owner.trim(),
+                      fav.repo.trim(),
+                      fav.path.trim(),
+                      fav.name.trim(),
+                    );
+
+              if (result.kind === "Ok") {
+                favorites.value = result.value;
+                importedCount++;
+              } else {
+                errors.push(`${fav.name}: ${result.error}`);
+              }
+            } else {
+              skippedCount++;
             }
+          } else {
+            const name =
+              fav !== null &&
+              fav !== undefined &&
+              typeof fav.name === "string" &&
+              fav.name !== null
+                ? fav.name
+                : "Unknown";
+            errors.push(`${name}: missing required fields`);
           }
+        } catch (err) {
+          const name =
+            fav !== null &&
+            fav !== undefined &&
+            typeof fav.name === "string" &&
+            fav.name !== null
+              ? fav.name
+              : "Unknown";
+          errors.push(
+            `${name}: ${err instanceof Error ? err.message : "Import error"}`,
+          );
         }
       }
 
       saveToLocalStorage(STORAGE_KEYS.FAVORITES, favorites.value);
-      sdk.window.showToast(`Imported ${importedCount} new favorites`, {
-        variant: "success",
-      });
-    } catch {
-      sdk.window.showToast("Failed to import favorites", { variant: "error" });
+
+      if (importedCount > 0) {
+        hasSuccess = true;
+        let message = `Imported ${importedCount} favorite(s)`;
+        if (skippedCount > 0) {
+          message += `, skipped ${skippedCount} duplicate(s)`;
+        }
+        sdk.window.showToast(message, { variant: "success" });
+      } else if (skippedCount > 0) {
+        hasSuccess = true;
+        sdk.window.showToast(`All ${skippedCount} favorites already exist`, {
+          variant: "info",
+        });
+      } else if (errors.length > 0) {
+        sdk.window.showToast(
+          `Import failed: ${errors.slice(0, 3).join(", ")}${errors.length > 3 ? "..." : ""}`,
+          { variant: "error" },
+        );
+      }
+    } catch (error) {
+      if (!hasSuccess) {
+        const errorMessage =
+          error instanceof Error ? error.message : "Unknown error";
+        sdk.window.showToast(`Failed to import favorites: ${errorMessage}`, {
+          variant: "error",
+        });
+      }
     }
   };
 
@@ -2135,91 +2762,207 @@ export const useRepoExplorer = () => {
   };
 
   const importCollections = async (file: File) => {
+    let hasSuccess = false;
     try {
-      const text = await file.text();
-      const data = JSON.parse(text) as {
-        collections?: Array<{
-          id?: string;
-          name?: string;
-          description?: string;
-          createdAt?: number;
-        }>;
-        collectionItems?: CollectionItem[];
-      };
+      let text = await file.text();
 
-      if (data.collections === undefined || !Array.isArray(data.collections)) {
-        sdk.window.showToast("Invalid collections file format", {
+      if (text.trim().length === 0) {
+        sdk.window.showToast("File is empty", {
           variant: "error",
         });
         return;
       }
 
+      text = sanitizeImportedData(text);
+
+      let data;
+      try {
+        data = JSON.parse(text) as {
+          version?: number;
+          collections?: Array<{
+            id?: string;
+            name?: string;
+            description?: string;
+            createdAt?: number;
+          }>;
+          collectionItems?: CollectionItem[];
+        };
+      } catch (parseError) {
+        sdk.window.showToast(
+          `Invalid JSON format: ${parseError instanceof Error ? parseError.message : "Parse error"}`,
+          {
+            variant: "error",
+          },
+        );
+        return;
+      }
+
+      if (data.collections === undefined || !Array.isArray(data.collections)) {
+        sdk.window.showToast(
+          "Invalid collections file format - missing 'collections' array",
+          {
+            variant: "error",
+          },
+        );
+        return;
+      }
+
+      if (data.collections.length === 0) {
+        sdk.window.showToast("No collections found in file", {
+          variant: "info",
+        });
+        return;
+      }
+
       let importedCollections = 0;
+      let skippedCollections = 0;
       let importedItems = 0;
+      const errors: string[] = [];
 
       for (const col of data.collections) {
-        if (
-          col.id !== undefined &&
-          col.name !== undefined &&
-          col.id.length > 0 &&
-          col.name.length > 0
-        ) {
-          const exists = collections.value.some(
-            (c) => c.name.toLowerCase() === col.name!.toLowerCase(),
-          );
-          if (!exists) {
-            const newId = `col-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-            collections.value.push({
-              id: newId,
-              name: col.name,
-              description: col.description ?? "",
-              createdAt: col.createdAt ?? Date.now(),
-            });
+        try {
+          if (
+            col !== null &&
+            col !== undefined &&
+            typeof col.name === "string" &&
+            col.name !== null &&
+            col.name.trim().length > 0
+          ) {
+            const exists = collections.value.some(
+              (c) => c.name.toLowerCase() === col.name.trim().toLowerCase(),
+            );
+            if (!exists) {
+              const newId = `col-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+              collections.value.push({
+                id: newId,
+                name: col.name.trim(),
+                description:
+                  typeof col.description === "string" &&
+                  col.description !== null
+                    ? col.description.trim()
+                    : "",
+                createdAt:
+                  typeof col.createdAt === "number"
+                    ? col.createdAt
+                    : Date.now(),
+              });
 
-            if (
-              data.collectionItems !== undefined &&
-              Array.isArray(data.collectionItems)
-            ) {
-              const colItems = data.collectionItems.filter(
-                (item) => item.collectionId === col.id,
-              );
-              for (const item of colItems) {
-                collectionItems.value.push({
-                  collectionId: newId,
-                  owner: item.owner,
-                  repo: item.repo,
-                  path: item.path,
-                  name: item.name,
-                  note: item.note,
-                });
-                importedItems++;
+              if (
+                data.collectionItems !== undefined &&
+                Array.isArray(data.collectionItems)
+              ) {
+                const colItems = data.collectionItems.filter(
+                  (item) => item.collectionId === col.id,
+                );
+                for (const item of colItems) {
+                  try {
+                    if (
+                      item !== null &&
+                      item !== undefined &&
+                      typeof item.owner === "string" &&
+                      item.owner !== null &&
+                      item.owner.trim().length > 0 &&
+                      typeof item.repo === "string" &&
+                      item.repo !== null &&
+                      item.repo.trim().length > 0 &&
+                      typeof item.path === "string" &&
+                      item.path !== null &&
+                      item.path.trim().length > 0 &&
+                      typeof item.name === "string" &&
+                      item.name !== null &&
+                      item.name.trim().length > 0
+                    ) {
+                      collectionItems.value.push({
+                        collectionId: newId,
+                        owner: item.owner.trim(),
+                        repo: item.repo.trim(),
+                        path: item.path.trim(),
+                        name: item.name.trim(),
+                        note:
+                          typeof item.note === "string" && item.note !== null
+                            ? item.note.trim()
+                            : undefined,
+                      });
+                      importedItems++;
+                    } else {
+                      errors.push(
+                        `Skipped item in "${col.name}": missing required fields`,
+                      );
+                    }
+                  } catch (itemErr) {
+                    errors.push(
+                      `Error importing item in "${col.name}": ${itemErr instanceof Error ? itemErr.message : "Unknown error"}`,
+                    );
+                  }
+                }
               }
-            }
 
-            importedCollections++;
+              importedCollections++;
+            } else {
+              skippedCollections++;
+            }
+          } else {
+            const name =
+              col !== null &&
+              col !== undefined &&
+              typeof col.name === "string" &&
+              col.name !== null
+                ? col.name
+                : "Unknown";
+            errors.push(`${name}: missing name`);
           }
+        } catch (err) {
+          const name =
+            col !== null &&
+            col !== undefined &&
+            typeof col.name === "string" &&
+            col.name !== null
+              ? col.name
+              : "Unknown";
+          errors.push(
+            `${name}: ${err instanceof Error ? err.message : "Import error"}`,
+          );
         }
       }
 
-      if (importedCollections > 0) {
+      if (importedCollections > 0 || importedItems > 0) {
+        hasSuccess = true;
         saveToLocalStorage(STORAGE_KEYS.COLLECTIONS, collections.value);
         saveToLocalStorage(
           STORAGE_KEYS.COLLECTION_ITEMS,
           collectionItems.value,
         );
+        let message = `Imported ${importedCollections} collection(s) with ${importedItems} item(s)`;
+        if (skippedCollections > 0) {
+          message += `, skipped ${skippedCollections} duplicate collection(s)`;
+        }
+        sdk.window.showToast(message, { variant: "success" });
+
+        if (errors.length > 0) {
+          sdk.window.showToast(`Note: ${errors.length} item(s) had errors`, {
+            variant: "warning",
+          });
+        }
+      } else if (skippedCollections > 0) {
+        hasSuccess = true;
         sdk.window.showToast(
-          `Imported ${importedCollections} collections with ${importedItems} items`,
-          { variant: "success" },
+          `All ${skippedCollections} collections already exist`,
+          { variant: "info" },
         );
-      } else {
-        sdk.window.showToast("No new collections to import", {
-          variant: "info",
-        });
+      } else if (errors.length > 0) {
+        sdk.window.showToast(
+          `Import failed: ${errors.slice(0, 3).join(", ")}${errors.length > 3 ? "..." : ""}`,
+          { variant: "error" },
+        );
       }
     } catch (error) {
-      sdk.window.showToast("Failed to parse collections file", {
-        variant: "error",
-      });
+      if (!hasSuccess) {
+        const errorMessage =
+          error instanceof Error ? error.message : "Unknown error";
+        sdk.window.showToast(`Failed to import collections: ${errorMessage}`, {
+          variant: "error",
+        });
+      }
     }
   };
 
@@ -2649,12 +3392,21 @@ export const useRepoExplorer = () => {
     { deep: true },
   );
 
+  watch(
+    customPayloads,
+    (newPayloads) => {
+      saveToLocalStorage(STORAGE_KEYS.CUSTOM_PAYLOADS, newPayloads);
+    },
+    { deep: true },
+  );
+
   onMounted(() => {
     loadRepos();
     loadTags();
     loadCollections();
     loadHistory();
     loadLogs();
+    loadCustomPayloads();
   });
 
   return {
@@ -2785,5 +3537,24 @@ export const useRepoExplorer = () => {
     bulkToggleFavorite,
     bulkAddToCollection,
     bulkApplyTag,
+    customPayloads,
+    showCustomPayloadDialog,
+    showCustomPayloadViewDialog,
+    viewingCustomPayload,
+    editingCustomPayload,
+    newCustomPayloadName,
+    newCustomPayloadContent,
+    newCustomPayloadDescription,
+    loadCustomPayloads,
+    openCustomPayloadDialog,
+    saveCustomPayload,
+    deleteCustomPayload,
+    copyCustomPayloadToClipboard,
+    exportCustomPayloads,
+    importCustomPayloads,
+    triggerCustomPayloadImport,
+    viewCustomPayloads,
+    viewCustomPayload,
+    exportCustomPayloadAsFile,
   };
 };
