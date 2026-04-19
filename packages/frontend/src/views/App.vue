@@ -6,6 +6,7 @@ import Dialog from "primevue/dialog";
 import InputText from "primevue/inputtext";
 import ProgressSpinner from "primevue/progressspinner";
 import Select from "primevue/select";
+import Textarea from "primevue/textarea";
 import { onMounted, onUnmounted } from "vue";
 
 import { useRepoExplorer } from "@/composables/useRepoExplorer";
@@ -132,6 +133,23 @@ const {
   bulkToggleFavorite,
   bulkAddToCollection,
   bulkApplyTag,
+  customPayloads,
+  showCustomPayloadDialog,
+  showCustomPayloadViewDialog,
+  viewingCustomPayload,
+  editingCustomPayload,
+  newCustomPayloadName,
+  newCustomPayloadContent,
+  newCustomPayloadDescription,
+  openCustomPayloadDialog,
+  saveCustomPayload,
+  deleteCustomPayload,
+  copyCustomPayloadToClipboard,
+  exportCustomPayloads,
+  triggerCustomPayloadImport,
+  viewCustomPayloads,
+  viewCustomPayload,
+  exportCustomPayloadAsFile,
 } = useRepoExplorer();
 
 const openInNewTab = (url: string) => {
@@ -152,6 +170,8 @@ const handleRepoNavigate = (event: Event) => {
     viewLogs();
   } else if (view === "repo-search") {
     viewRepoSearch();
+  } else if (view === "custom-payloads") {
+    viewCustomPayloads();
   } else if (view === "settings") {
     viewState.value = "settings";
   }
@@ -210,6 +230,7 @@ onUnmounted(() => {
         <div class="logo-section">
           <i class="fas fa-layer-group logo-icon"></i>
           <span class="logo-text">RepoExplorer</span>
+          <span class="header-version">v1.0.7</span>
         </div>
       </div>
 
@@ -253,6 +274,14 @@ onUnmounted(() => {
           :class="{ 'has-items': collections.length > 0 }"
           title="Collections"
           @click="viewCollections"
+        />
+        <Button
+          icon="fas fa-file-code"
+          text
+          class="action-btn"
+          :class="{ 'has-items': customPayloads.length > 0 }"
+          title="Custom Payloads"
+          @click="viewCustomPayloads"
         />
         <Button
           icon="fas fa-history"
@@ -1538,6 +1567,125 @@ onUnmounted(() => {
         </div>
       </template>
 
+      <template v-else-if="viewState === 'custom-payloads'">
+        <div class="detail-header">
+          <h2>
+            <i class="fas fa-file-code"></i>
+            Custom Payloads
+          </h2>
+          <div class="favorites-actions">
+            <span class="file-count">{{ customPayloads.length }} payloads</span>
+            <Button
+              icon="fas fa-plus"
+              label="Create New"
+              text
+              size="small"
+              title="Create new custom payload"
+              @click="openCustomPayloadDialog()"
+            />
+            <Button
+              icon="fas fa-file-import"
+              label="Import"
+              text
+              size="small"
+              title="Import custom payloads from file"
+              @click="triggerCustomPayloadImport"
+            />
+            <Button
+              icon="fas fa-file-export"
+              label="Export"
+              text
+              size="small"
+              :disabled="customPayloads.length === 0"
+              title="Export custom payloads to file"
+              @click="exportCustomPayloads"
+            />
+          </div>
+        </div>
+
+        <div v-if="customPayloads.length > 0" class="file-list">
+          <div
+            v-for="payload in customPayloads"
+            :key="payload.id"
+            class="file-item clickable-file-item"
+            @click="viewCustomPayload(payload)"
+          >
+            <div class="file-item-header">
+              <div class="file-info">
+                <i class="fas fa-file-code"></i>
+                <div class="file-details">
+                  <span class="file-name">{{ payload.name }}</span>
+                  <span v-if="payload.description" class="file-description">
+                    {{ payload.description }}
+                  </span>
+                  <div class="file-meta">
+                    <span>
+                      Created:
+                      {{ new Date(payload.createdAt).toLocaleDateString() }}
+                    </span>
+                    <span v-if="payload.updatedAt !== payload.createdAt">
+                      Updated:
+                      {{ new Date(payload.updatedAt).toLocaleDateString() }}
+                    </span>
+                    <span>
+                      {{
+                        payload.content
+                          .split("\n")
+                          .filter((l) => l.trim().length > 0).length
+                      }}
+                      lines
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div class="file-actions" @click.stop>
+                <Button
+                  icon="fas fa-copy"
+                  text
+                  size="small"
+                  title="Copy to clipboard"
+                  @click="copyCustomPayloadToClipboard(payload)"
+                />
+                <Button
+                  icon="fas fa-download"
+                  text
+                  size="small"
+                  title="Export as file"
+                  @click="exportCustomPayloadAsFile(payload)"
+                />
+                <Button
+                  icon="fas fa-edit"
+                  text
+                  size="small"
+                  title="Edit payload"
+                  @click="openCustomPayloadDialog(payload)"
+                />
+                <Button
+                  icon="fas fa-trash"
+                  text
+                  size="small"
+                  severity="danger"
+                  title="Delete payload"
+                  @click="deleteCustomPayload(payload.id)"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div v-else class="empty-state">
+          <i class="fas fa-file-code"></i>
+          <p>No custom payloads yet</p>
+          <span>Create your own payload files or import existing ones</span>
+          <Button
+            label="Create Your First Payload"
+            icon="fas fa-plus"
+            class="mt-4"
+            @click="openCustomPayloadDialog()"
+          />
+        </div>
+      </template>
+
       <template v-else-if="viewState === 'settings'">
         <div class="settings-page">
           <div class="settings-page-header">
@@ -1571,6 +1719,22 @@ onUnmounted(() => {
             >
               <i class="fas fa-layer-group"></i>
               Collections
+            </button>
+            <button
+              class="settings-tab-btn"
+              :class="{ active: settingsTab === 'custom-payloads' }"
+              @click="settingsTab = 'custom-payloads'"
+            >
+              <i class="fas fa-file-code"></i>
+              Custom Payloads
+            </button>
+            <button
+              class="settings-tab-btn"
+              :class="{ active: settingsTab === 'about' }"
+              @click="settingsTab = 'about'"
+            >
+              <i class="fas fa-info-circle"></i>
+              About
             </button>
           </div>
 
@@ -1913,6 +2077,194 @@ onUnmounted(() => {
                 </div>
               </div>
             </div>
+
+            <div
+              v-if="settingsTab === 'custom-payloads'"
+              class="settings-section"
+            >
+              <div class="info-card">
+                <i class="fas fa-info-circle"></i>
+                <div>
+                  <strong>About Custom Payloads</strong>
+                  <p>
+                    Custom payloads allow you to create your own payload files
+                    that can be used independently of GitHub repositories.
+                    Create, edit, and manage your own custom wordlists directly
+                    in the plugin.
+                  </p>
+                </div>
+              </div>
+
+              <div class="settings-card">
+                <div class="settings-card-header">
+                  <i class="fas fa-file-code"></i>
+                  <h3>Manage Custom Payloads</h3>
+                </div>
+                <p class="settings-card-description">
+                  Create, import, and export custom payload files
+                </p>
+                <div class="import-export-actions">
+                  <Button
+                    icon="fas fa-plus"
+                    label="Create New Payload"
+                    @click="openCustomPayloadDialog()"
+                  />
+                  <Button
+                    icon="fas fa-file-import"
+                    label="Import Payloads"
+                    severity="secondary"
+                    @click="triggerCustomPayloadImport"
+                  />
+                  <Button
+                    icon="fas fa-file-export"
+                    label="Export All Payloads"
+                    severity="secondary"
+                    :disabled="customPayloads.length === 0"
+                    @click="exportCustomPayloads"
+                  />
+                  <Button
+                    icon="fas fa-eye"
+                    label="View All Payloads"
+                    @click="viewCustomPayloads"
+                  />
+                </div>
+              </div>
+
+              <div class="info-card">
+                <i class="fas fa-lightbulb"></i>
+                <div>
+                  <strong>How to use custom payloads</strong>
+                  <p>
+                    1. Click "Create New Payload" to create a custom payload
+                    file<br />
+                    2. Enter your payloads (one per line) or paste existing
+                    wordlists<br />
+                    3. Export as a file to use in Caido's Automate or other
+                    tools<br />
+                    4. Import/Export to backup or share your custom payloads
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="settingsTab === 'about'" class="settings-section">
+              <div class="about-container">
+                <div class="about-header">
+                  <div class="about-icon">
+                    <i class="fas fa-code-branch"></i>
+                  </div>
+                  <div class="about-title-section">
+                    <h1 class="about-title">RepoExplorer</h1>
+                    <span class="about-version">Version 1.0.7</span>
+                  </div>
+                </div>
+
+                <div class="about-description">
+                  <p>
+                    RepoExplorer is a powerful Caido plugin designed to help
+                    security professionals browse and explore content from
+                    GitHub repositories like PayloadsAllTheThings. It provides
+                    comprehensive repository browsing, favorites management,
+                    collections, custom payloads, and seamless integration with
+                    Caido's workflow.
+                  </p>
+                </div>
+
+                <div class="about-features">
+                  <h3>
+                    <i class="fas fa-star"></i>
+                    Key Features
+                  </h3>
+                  <ul>
+                    <li>
+                      <i class="fas fa-code-branch"></i>
+                      Browse multiple GitHub repositories
+                    </li>
+                    <li>
+                      <i class="fas fa-heart"></i>
+                      Save and manage favorite files
+                    </li>
+                    <li>
+                      <i class="fas fa-layer-group"></i>
+                      Organize files in collections
+                    </li>
+                    <li>
+                      <i class="fas fa-file-code"></i>
+                      Create custom payload files
+                    </li>
+                    <li>
+                      <i class="fas fa-tags"></i>
+                      Tag and categorize content
+                    </li>
+                    <li>
+                      <i class="fas fa-search"></i>
+                      Powerful search capabilities
+                    </li>
+                    <li>
+                      <i class="fas fa-download"></i>
+                      Export to Automate, wordlists, or files
+                    </li>
+                  </ul>
+                </div>
+
+                <div class="about-connect">
+                  <h3>
+                    <i class="fas fa-link"></i>
+                    Connect
+                  </h3>
+                  <div class="about-links">
+                    <a
+                      href="https://github.com/ChrisCZ2/RepoExplorer"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="about-link github-link"
+                    >
+                      <i class="fab fa-github"></i>
+                      View on GitHub
+                    </a>
+                    <a
+                      href="https://x.com/ChrisCz_"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="about-link twitter-link"
+                    >
+                      <i class="fab fa-x-twitter"></i>
+                      Follow on X
+                    </a>
+                    <a
+                      href="https://github.com/ChrisCZ2/RepoExplorer/issues"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="about-link issues-link"
+                    >
+                      <i class="fas fa-bug"></i>
+                      Report Issues
+                    </a>
+                    <a
+                      href="https://github.com/ChrisCZ2/RepoExplorer/stargazers"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="about-link star-link"
+                    >
+                      <i class="fas fa-star"></i>
+                      Star on GitHub
+                    </a>
+                  </div>
+                </div>
+
+                <div class="about-footer">
+                  <p class="about-made-with">
+                    Made with
+                    <i class="fas fa-heart" style="color: #e74c3c"></i>
+                    by ChrisCz
+                  </p>
+                  <p class="about-license">
+                    <i class="fas fa-balance-scale"></i>
+                    Licensed under MIT
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </template>
@@ -2123,6 +2475,189 @@ onUnmounted(() => {
         </div>
       </div>
     </Dialog>
+
+    <Dialog
+      v-model:visible="showCustomPayloadViewDialog"
+      :header="viewingCustomPayload?.name ?? 'Custom Payload'"
+      modal
+      :style="{ width: '90vw', maxWidth: '1400px' }"
+      class="file-dialog"
+      :pt="{
+        content: {
+          style: 'padding: 1.5rem; display: flex; flex-direction: column;',
+        },
+      }"
+    >
+      <div v-if="viewingCustomPayload">
+        <div
+          v-if="viewingCustomPayload.description"
+          :style="{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.75rem',
+            padding: '0.75rem 1rem',
+            marginBottom: '1rem',
+            background: 'rgba(59, 130, 246, 0.1)',
+            borderLeft: '3px solid rgba(59, 130, 246, 0.5)',
+            borderRadius: '0.25rem',
+            fontSize: '0.875rem',
+            color: 'rgba(228, 228, 231, 0.9)',
+          }"
+        >
+          <i
+            class="fas fa-info-circle"
+            style="color: rgba(59, 130, 246, 0.8)"
+          ></i>
+          <span>{{ viewingCustomPayload.description }}</span>
+        </div>
+
+        <div class="file-dialog-actions">
+          <span class="edit-hint">
+            <i class="fas fa-file-code"></i>
+            Custom Payload • Created:
+            {{ new Date(viewingCustomPayload.createdAt).toLocaleDateString() }}
+            <span
+              v-if="
+                viewingCustomPayload.updatedAt !==
+                viewingCustomPayload.createdAt
+              "
+            >
+              • Updated:
+              {{
+                new Date(viewingCustomPayload.updatedAt).toLocaleDateString()
+              }}
+            </span>
+            •
+            {{
+              viewingCustomPayload.content
+                .split("\n")
+                .filter((l) => l.trim().length > 0).length
+            }}
+            lines
+          </span>
+          <div class="dialog-buttons">
+            <Button
+              icon="fas fa-edit"
+              label="Edit"
+              size="small"
+              text
+              @click="
+                openCustomPayloadDialog(viewingCustomPayload);
+                showCustomPayloadViewDialog = false;
+              "
+            />
+            <Button
+              icon="fas fa-download"
+              label="Export"
+              size="small"
+              text
+              @click="exportCustomPayloadAsFile(viewingCustomPayload)"
+            />
+            <Button
+              icon="fas fa-copy"
+              label="Copy"
+              size="small"
+              @click="
+                copyCustomPayloadToClipboard(viewingCustomPayload);
+                showCustomPayloadViewDialog = false;
+              "
+            />
+          </div>
+        </div>
+        <textarea
+          :value="viewingCustomPayload.content"
+          readonly
+          class="file-content-textarea"
+          :style="{
+            width: '100%',
+            minHeight: '60vh',
+            height: '65vh',
+            backgroundColor: '#0d1117',
+            color: '#c9d1d9',
+            padding: '1.5rem',
+            borderRadius: '0.75rem',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            fontFamily: 'Fira Code, Monaco, Consolas, monospace',
+            fontSize: '0.9rem',
+            lineHeight: '1.8',
+            resize: 'vertical',
+            boxSizing: 'border-box',
+          }"
+        ></textarea>
+      </div>
+    </Dialog>
+
+    <Dialog
+      v-model:visible="showCustomPayloadDialog"
+      :header="
+        editingCustomPayload ? 'Edit Custom Payload' : 'Create Custom Payload'
+      "
+      modal
+      :style="{ width: '800px' }"
+      :pt="{
+        root: { class: 'custom-payload-dialog-root' },
+        header: { class: 'custom-payload-dialog-header' },
+        content: { class: 'custom-payload-dialog-content' },
+      }"
+    >
+      <div class="custom-payload-dialog">
+        <div class="custom-payload-form">
+          <div class="form-field">
+            <label for="payload-name">
+              <i class="fas fa-tag"></i>
+              Payload Name *
+            </label>
+            <InputText
+              id="payload-name"
+              v-model="newCustomPayloadName"
+              placeholder="e.g., XSS Basic, SQL Union, Custom Wordlist"
+              class="w-full"
+            />
+          </div>
+
+          <div class="form-field">
+            <label for="payload-description">
+              <i class="fas fa-info-circle"></i>
+              Description (optional)
+            </label>
+            <InputText
+              id="payload-description"
+              v-model="newCustomPayloadDescription"
+              placeholder="Brief description of this payload"
+              class="w-full"
+            />
+          </div>
+
+          <div class="form-field">
+            <label for="payload-content">
+              <i class="fas fa-file-code"></i>
+              Payload Content *
+              <span class="field-hint">(one payload per line)</span>
+            </label>
+            <Textarea
+              id="payload-content"
+              v-model="newCustomPayloadContent"
+              placeholder="Enter payloads here (one per line)&#10;Example:&#10;<script>alert(1)</script>&#10;' OR '1'='1&#10;../../etc/passwd"
+              rows="15"
+              class="w-full payload-textarea"
+            />
+          </div>
+        </div>
+
+        <div class="custom-payload-actions">
+          <Button
+            label="Cancel"
+            text
+            @click="showCustomPayloadDialog = false"
+          />
+          <Button
+            :label="editingCustomPayload ? 'Update' : 'Create'"
+            icon="fas fa-save"
+            @click="saveCustomPayload"
+          />
+        </div>
+      </div>
+    </Dialog>
   </div>
 </template>
 
@@ -2211,6 +2746,17 @@ onUnmounted(() => {
   );
   border-radius: 0.75rem;
   border: 1px solid rgba(233, 69, 96, 0.2);
+}
+
+.header-version {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.5rem;
+  background: rgba(233, 69, 96, 0.2);
+  color: #e94560;
+  border-radius: 0.375rem;
+  font-weight: 600;
+  border: 1px solid rgba(233, 69, 96, 0.3);
+  opacity: 0.8;
 }
 
 .logo-icon {
@@ -4466,5 +5012,287 @@ textarea.note-textarea::placeholder,
 * {
   scrollbar-width: thin;
   scrollbar-color: #e94560 rgba(26, 26, 46, 0.5);
+}
+
+.custom-payload-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.custom-payload-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.form-field label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #e4e4e7;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.form-field label i {
+  color: rgba(233, 69, 96, 0.8);
+}
+
+.field-hint {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: rgba(228, 228, 231, 0.6);
+  margin-left: auto;
+}
+
+.payload-textarea {
+  font-family: "Courier New", monospace;
+  font-size: 0.875rem;
+  resize: vertical;
+  min-height: 300px;
+}
+
+.custom-payload-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.file-description {
+  font-size: 0.75rem;
+  color: rgba(228, 228, 231, 0.7);
+  font-style: italic;
+}
+
+.clickable-file-item {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.clickable-file-item:hover {
+  transform: translateX(5px);
+  border-left-color: rgba(233, 69, 96, 0.8);
+}
+
+.about-container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.about-header {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  margin-bottom: 2rem;
+  padding: 2rem;
+  background: linear-gradient(
+    135deg,
+    rgba(233, 69, 96, 0.1),
+    rgba(138, 43, 226, 0.1)
+  );
+  border-radius: 1rem;
+  border: 1px solid rgba(233, 69, 96, 0.2);
+}
+
+.about-icon {
+  width: 80px;
+  height: 80px;
+  background: linear-gradient(135deg, #e94560, #8a2be2);
+  border-radius: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.5rem;
+  color: white;
+  box-shadow: 0 8px 20px rgba(233, 69, 96, 0.3);
+}
+
+.about-title-section {
+  flex: 1;
+}
+
+.about-title {
+  font-size: 2.5rem;
+  font-weight: 700;
+  margin: 0;
+  background: linear-gradient(135deg, #e94560, #8a2be2);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.about-version {
+  display: inline-block;
+  margin-top: 0.5rem;
+  padding: 0.25rem 0.75rem;
+  background: rgba(233, 69, 96, 0.2);
+  color: #e94560;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border: 1px solid rgba(233, 69, 96, 0.3);
+}
+
+.about-description {
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 0.75rem;
+  border-left: 4px solid #e94560;
+}
+
+.about-description p {
+  margin: 0;
+  line-height: 1.8;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 1rem;
+}
+
+.about-features {
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 0.75rem;
+}
+
+.about-features h3 {
+  margin: 0 0 1rem 0;
+  color: #e94560;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.25rem;
+}
+
+.about-features ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.about-features li {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 0.5rem;
+  transition: all 0.3s ease;
+}
+
+.about-features li:hover {
+  background: rgba(233, 69, 96, 0.1);
+  transform: translateX(5px);
+}
+
+.about-features li i {
+  color: #e94560;
+  width: 20px;
+  text-align: center;
+}
+
+.about-connect {
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 0.75rem;
+}
+
+.about-connect h3 {
+  margin: 0 0 1rem 0;
+  color: #e94560;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.25rem;
+}
+
+.about-links {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.about-link {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.5rem;
+  color: rgba(255, 255, 255, 0.9);
+  text-decoration: none;
+  transition: all 0.3s ease;
+  font-weight: 500;
+}
+
+.about-link:hover {
+  background: rgba(233, 69, 96, 0.15);
+  border-color: #e94560;
+  color: #e94560;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(233, 69, 96, 0.2);
+}
+
+.about-link i {
+  font-size: 1.1rem;
+}
+
+.github-link:hover {
+  background: rgba(0, 0, 0, 0.3);
+  border-color: #ffffff;
+  color: #ffffff;
+}
+
+.twitter-link:hover {
+  background: rgba(0, 0, 0, 0.3);
+  border-color: #ffffff;
+  color: #ffffff;
+}
+
+.star-link:hover {
+  background: rgba(255, 215, 0, 0.15);
+  border-color: #ffd700;
+  color: #ffd700;
+}
+
+.about-footer {
+  margin-top: 3rem;
+  padding-top: 2rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  text-align: center;
+}
+
+.about-made-with {
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+  color: rgba(255, 255, 255, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.about-license {
+  margin: 0;
+  font-size: 0.875rem;
+  color: rgba(255, 255, 255, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
 }
 </style>
