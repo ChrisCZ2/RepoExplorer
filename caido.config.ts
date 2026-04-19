@@ -10,9 +10,9 @@ import prefixwrap from "postcss-prefixwrap";
 const id = "repo-explorer";
 export default defineConfig({
   id,
-  name: "Repo Explorer",
+  name: "RepoExplorer",
   description: "Browse and explore content from GitHub repositories like PayloadsAllTheThings",
-  version: "1.0.6",
+  version: "1.0.7",
   author: {
     name: "Chriscz",
     email: "chrisczv@proton.me",
