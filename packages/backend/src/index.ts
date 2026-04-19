@@ -70,6 +70,16 @@ export type LogEntry = {
   metadata?: Record<string, unknown>;
 };
 
+export type CustomPayload = {
+  id: string;
+  name: string;
+  content: string;
+  description?: string;
+  tags?: string[];
+  createdAt: number;
+  updatedAt: number;
+};
+
 const DEFAULT_REPO: GitHubRepo = {
   owner: "swisskyrepo",
   repo: "PayloadsAllTheThings",
@@ -93,6 +103,7 @@ const collections: Collection[] = [];
 const collectionItems: CollectionItem[] = [];
 const history: HistoryItem[] = [];
 const logs: LogEntry[] = [];
+const customPayloads: CustomPayload[] = [];
 const MAX_HISTORY_ITEMS = 50;
 const MAX_LOG_ITEMS = 500;
 
@@ -105,6 +116,7 @@ const STORAGE_KEYS = {
   COLLECTION_ITEMS: "repo-explorer-collection-items",
   HISTORY: "repo-explorer-history",
   LOGS: "repo-explorer-logs",
+  CUSTOM_PAYLOADS: "repo-explorer-custom-payloads",
 } as const;
 
 const storageData: Record<string, string> = {};
@@ -126,6 +138,24 @@ const loadFromStorage = <T>(sdk: SDK, key: string, defaultValue: T): T => {
     const stored = storageData[key];
     if (stored !== undefined) {
       const parsed = JSON.parse(stored) as T;
+
+      if (key === STORAGE_KEYS.CUSTOM_PAYLOADS && Array.isArray(parsed)) {
+        const validPayloads = (parsed as unknown as CustomPayload[]).filter(
+          (p) => {
+            if (p === null || p === undefined) return false;
+            if (typeof p.name !== "string" || p.name === null) return false;
+            if (typeof p.content !== "string" || p.content === null)
+              return false;
+            if (typeof p.id !== "string" || p.id === null) return false;
+            return true;
+          },
+        );
+        sdk.console.log(
+          `Loaded ${key}: ${validPayloads.length} valid items (filtered ${parsed.length - validPayloads.length} invalid)`,
+        );
+        return validPayloads as T;
+      }
+
       sdk.console.log(
         `Loaded ${key}: ${Array.isArray(parsed) ? (parsed as Array<unknown>).length : "1"} items`,
       );
@@ -648,6 +678,147 @@ const clearLogs = (sdk: SDK): Result<LogEntry[]> => {
   return { kind: "Ok", value: [] };
 };
 
+const getCustomPayloads = (): Result<CustomPayload[]> => {
+  return { kind: "Ok", value: customPayloads };
+};
+
+const createCustomPayload = (
+  sdk: SDK,
+  name: string,
+  content: string,
+  description?: string,
+  tags?: string[],
+): Result<CustomPayload[]> => {
+  if (
+    name === undefined ||
+    name === null ||
+    typeof name !== "string" ||
+    name.trim().length === 0
+  ) {
+    return { kind: "Error", error: "Payload name is required" };
+  }
+
+  if (
+    content === undefined ||
+    content === null ||
+    typeof content !== "string" ||
+    content.trim().length === 0
+  ) {
+    return { kind: "Error", error: "Payload content is required" };
+  }
+
+  const exists = customPayloads.some(
+    (p) => p.name.toLowerCase() === name.toLowerCase(),
+  );
+  if (exists) {
+    return {
+      kind: "Error",
+      error: "Custom payload with this name already exists",
+    };
+  }
+
+  const newPayload: CustomPayload = {
+    id: `custom-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    name: name.trim(),
+    content,
+    description:
+      description !== undefined &&
+      description !== null &&
+      typeof description === "string" &&
+      description.trim().length > 0
+        ? description.trim()
+        : undefined,
+    tags:
+      tags !== undefined &&
+      tags !== null &&
+      Array.isArray(tags) &&
+      tags.length > 0
+        ? tags
+        : undefined,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+  customPayloads.push(newPayload);
+  saveToStorage(sdk, STORAGE_KEYS.CUSTOM_PAYLOADS, customPayloads);
+  sdk.console.log(`Created custom payload: ${name}`);
+  return { kind: "Ok", value: customPayloads };
+};
+
+const updateCustomPayload = (
+  sdk: SDK,
+  id: string,
+  name: string,
+  content: string,
+  description?: string,
+  tags?: string[],
+): Result<CustomPayload[]> => {
+  if (
+    name === undefined ||
+    name === null ||
+    typeof name !== "string" ||
+    name.trim().length === 0
+  ) {
+    return { kind: "Error", error: "Payload name is required" };
+  }
+
+  if (
+    content === undefined ||
+    content === null ||
+    typeof content !== "string" ||
+    content.trim().length === 0
+  ) {
+    return { kind: "Error", error: "Payload content is required" };
+  }
+
+  const payload = customPayloads.find((p) => p.id === id);
+  if (payload === undefined) {
+    return { kind: "Error", error: "Custom payload not found" };
+  }
+
+  const nameExists = customPayloads.some(
+    (p) => p.id !== id && p.name.toLowerCase() === name.toLowerCase(),
+  );
+  if (nameExists) {
+    return {
+      kind: "Error",
+      error: "Another payload with this name already exists",
+    };
+  }
+
+  payload.name = name.trim();
+  payload.content = content;
+  payload.description =
+    description !== undefined &&
+    description !== null &&
+    typeof description === "string" &&
+    description.trim().length > 0
+      ? description.trim()
+      : undefined;
+  payload.tags =
+    tags !== undefined &&
+    tags !== null &&
+    Array.isArray(tags) &&
+    tags.length > 0
+      ? tags
+      : undefined;
+  payload.updatedAt = Date.now();
+  saveToStorage(sdk, STORAGE_KEYS.CUSTOM_PAYLOADS, customPayloads);
+  sdk.console.log(`Updated custom payload: ${id}`);
+  return { kind: "Ok", value: customPayloads };
+};
+
+const deleteCustomPayload = (sdk: SDK, id: string): Result<CustomPayload[]> => {
+  const index = customPayloads.findIndex((p) => p.id === id);
+  if (index === -1) {
+    return { kind: "Error", error: "Custom payload not found" };
+  }
+
+  customPayloads.splice(index, 1);
+  saveToStorage(sdk, STORAGE_KEYS.CUSTOM_PAYLOADS, customPayloads);
+  sdk.console.log(`Deleted custom payload: ${id}`);
+  return { kind: "Ok", value: customPayloads };
+};
+
 export type API = DefineAPI<{
   getRepos: typeof getRepos;
   addRepo: typeof addRepo;
@@ -681,6 +852,10 @@ export type API = DefineAPI<{
   getLogs: typeof getLogs;
   addLog: typeof addLog;
   clearLogs: typeof clearLogs;
+  getCustomPayloads: typeof getCustomPayloads;
+  createCustomPayload: typeof createCustomPayload;
+  updateCustomPayload: typeof updateCustomPayload;
+  deleteCustomPayload: typeof deleteCustomPayload;
 }>;
 
 const loadAllData = (sdk: SDK): void => {
@@ -720,9 +895,18 @@ const loadAllData = (sdk: SDK): void => {
   logs.length = 0;
   logs.push(...loadedLogs);
 
+  const loadedCustomPayloads = loadFromStorage(
+    sdk,
+    STORAGE_KEYS.CUSTOM_PAYLOADS,
+    [],
+  );
+  customPayloads.length = 0;
+  customPayloads.push(...loadedCustomPayloads);
+
   sdk.console.log("RepoExplorer data loaded from storage");
   sdk.console.log(`Default repo loaded: ${savedRepos[0]?.name}`);
   sdk.console.log(`Loaded ${logs.length} log entries`);
+  sdk.console.log(`Loaded ${customPayloads.length} custom payloads`);
 };
 
 export function init(sdk: SDK<API>) {
@@ -760,6 +944,10 @@ export function init(sdk: SDK<API>) {
   sdk.api.register("getLogs", getLogs);
   sdk.api.register("addLog", addLog);
   sdk.api.register("clearLogs", clearLogs);
+  sdk.api.register("getCustomPayloads", getCustomPayloads);
+  sdk.api.register("createCustomPayload", createCustomPayload);
+  sdk.api.register("updateCustomPayload", updateCustomPayload);
+  sdk.api.register("deleteCustomPayload", deleteCustomPayload);
 
   sdk.console.log("RepoExplorer plugin initialized");
 }
