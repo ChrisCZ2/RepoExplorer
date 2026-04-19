@@ -65,6 +65,16 @@ export type SearchResult = {
   textMatches: string[];
 };
 
+export type CustomPayload = {
+  id: string;
+  name: string;
+  content: string;
+  description?: string;
+  tags?: string[];
+  createdAt: number;
+  updatedAt: number;
+};
+
 export type ViewState =
   | "categories"
   | "detail"
@@ -76,7 +86,8 @@ export type ViewState =
   | "collection-detail"
   | "repo-search"
   | "history"
-  | "logs";
+  | "logs"
+  | "custom-payloads";
 
 export type HistoryItem = {
   id: string;
@@ -136,4 +147,4 @@ export type BreadcrumbItem = {
   path: string;
 };
 
-export type SettingsTab = "repos" | "tags" | "collections";
+export type SettingsTab = "repos" | "tags" | "collections" | "custom-payloads";
